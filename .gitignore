@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.streamlit/secrets.toml
+.env
+# local decision log
+cds_own_vs_list/decisions.csv
+# the partner name to label mapping is never committed
+data/private/
+*.pdf
+*.bak
