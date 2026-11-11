@@ -11,7 +11,7 @@ Built on 44 public therange.co.uk listings (partner names replaced with labels),
 commission and labelled estimates for the costs The Range does not publish. A small sample: a test of the method, not
 market sizing.
 
-Portfolio project. Author details available on request.
+Portfolio project. Made by Ami Sata.
 
 ## Run it
 

@@ -42,7 +42,7 @@ try:
     # launcher: default page, footer with version
     at = AppTest.from_file("streamlit_app.py", default_timeout=60).run()
     ok_footer = any("Not affiliated with The Range or CDS" in c.value and "v1.0" in c.value
-                    and "Author details available on request" in c.value for c in at.caption)
+                    and "Made by Ami Sata" in c.value for c in at.caption)
     assert not at.exception and ok_footer and any("Own vs List" in t.value for t in at.title)
     print("launcher ok")
 finally:

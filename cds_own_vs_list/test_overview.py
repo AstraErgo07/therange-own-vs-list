@@ -18,7 +18,7 @@ class TestOverview(unittest.TestCase):
 
     def test_footer_and_version(self):
         self.assertEqual(VERSION, "v1.0")
-        self.assertIn("Author details available on request.", FOOTER)
+        self.assertIn("Made by Ami Sata.", FOOTER)
         for bad in ("\u2014", "\u2013"):
             self.assertNotIn(bad, build())
 
