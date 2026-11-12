@@ -21,9 +21,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from cds_own_vs_list.calc import (RECOMMENDATIONS, Assumptions as RangeAssumptions, COMMISSION_REAL,  # noqa: E402
-                                  default_benchmarks, evaluate_portfolio, load_listings,
+                                  default_benchmarks, evaluate_portfolio, hurdle_sensitivity, load_listings,
                                   seller_summary, sensitivity)
-from cds_own_vs_list.workings import DECISION_RULES, own_vs_list_workings  # noqa: E402
+from cds_own_vs_list.insights import category_breakdown, insights  # noqa: E402
+from cds_own_vs_list.workings import (DECISION_RULES, HOLDING_SPLIT_TEXT, HURDLE_TEXT,  # noqa: E402
+                                      decision_rules, own_vs_list_workings)
 from common.text import FOOTER, VERSION  # noqa: E402
 
 OUT = ROOT / "docs" / "OVERVIEW.md"
@@ -74,7 +76,14 @@ def range_section() -> list[str]:
            "substitute a buyer might otherwise choose). Partner names are replaced with labels. Default settings: "
            + ", ".join(f"{r} {counts.get(r, 0)}" for r in RECOMMENDATIONS) + ".", "",
            "Decision rules, in order:", ""]
-    out += [f"{i}. {r}" for i, r in enumerate(DECISION_RULES, 1)] + [""]
+    out += [f"{i}. {r}" for i, r in enumerate(decision_rules(a), 1)] + [""]
+    out += ["## Insights from this sample", "",
+            "Every point below is taken from the model at these default assumptions, and is worded as a finding "
+            "in this sample under those assumptions, not as a business result.", ""]
+    out += [f"- {b}" for b in insights(listings, a)] + [""]
+    out += ["### Counts by category", "", md_table(category_breakdown(res)), ""]
+    out += ["## How holding cost and the hurdle are split", "", HOLDING_SPLIT_TEXT, "",
+            "## Why the hurdle is 25%, and what a typical bar looks like", "", HURDLE_TEXT, ""]
     top = res.iloc[0].to_dict()
     out += ["## Worked example: 1P against 3P", "",
             f"Top-ranked product: {top['sku']}, {top['title']} ({top['category']}, sold by {top['sold_by']}).", "",
@@ -83,7 +92,7 @@ def range_section() -> list[str]:
     out += ["## Top 10 partner products by 1P advantage", "", md_table(pd.DataFrame({
         "Rank": t["rank"], "Product": t["title"].str.slice(0, 45), "Category": t["category"], "Seller": t["sold_by"],
         "Est. units/year": (t["weekly_units"] * 52).round(0), "Avg selling price per unit (£)": t["price"].round(2),
-        "Est. GMV/year (£)": t["gmv_annual"].round(0), "1P profit/unit (£)": t["contrib_1p_unit"].round(2),
+        "Est. GMV/year (£)": t["gmv_annual"].round(0), "1P contribution/unit (£)": t["contrib_1p_unit"].round(2),
         "3P value/unit (£)": t["net_3p_unit"].round(2), "Return on stock": (t["return_on_capital"] * 100).round(0)
         .astype(int).astype(str) + "%", "Recommendation": t["recommendation"]})), ""]
     ss = seller_summary(res)
@@ -95,15 +104,21 @@ def range_section() -> list[str]:
         "Est. GMV/year (£)": ss["est_gmv_annual"].round(0), "Recommended in-house": ss["bring_in_house"],
         "Categories": ss["categories"]})), ""]
     summ, _, _ = sensitivity(listings, a)
+    hsumm, _, _ = hurdle_sensitivity(listings, a, hurdles=(0.25, 0.50, 1.00, 1.50, 2.00))
     out += ["## How sensitive is the answer?", "",
             md_table(summ.rename(columns={"scenario": "Scenario", "flipped_vs_current": "Flipped vs default"})), "",
             "Diversion is the share of partner buyers who would otherwise buy The Range's own item; COGS is the cost "
             "of goods. Changing diversion flips few products; moving the cost-price estimate by 10 points flips many. "
             "Supplier cost is the number to get first.", "",
-            "Note: where the price curve is set to 1 (home textiles, outdoor, beauty), units fall in exact proportion "
+            "If only the return-on-stock hurdle changes (25%, 50% and 100% are illustration points, not industry "
+            "standards; 150% and 200% are included because the lower bars often do not change the answer in this "
+            "sample):", "",
+            md_table(hsumm.drop(columns=["hurdle"]).rename(
+                columns={"scenario": "Scenario", "flipped_vs_current": "Flipped vs default"})), "",
+            "Note: where the price curve is set to 1 (every category except kitchen), units fall in exact proportion "
             "as price rises, so every item in that category gets the same GMV a year, for example £19,500 for home "
             "textiles. GMV is therefore not a useful ranking "
-            "here; the ranking uses profit per unit and return on stock instead.", ""]
+            "here; the ranking uses contribution per unit and return on stock instead.", ""]
     b = default_benchmarks()
     out += ["## Category assumptions (my judgement for UK value home retail, not CDS data)", "", md_table(pd.DataFrame([{
         "Category": c, "Cost of goods, % of ex-VAT price": f"{v.cogs_pct:.0%}", "Pick, pack, deliver": f"£{v.fulfilment_cost:.2f}",
@@ -122,7 +137,7 @@ def build() -> str:
          "Portfolio project. Made by Ami Sata.", "",
          "## Purpose", "",
          "For each product a marketplace partner sells on therange.co.uk (3P), should The Range buy and stock it "
-         "itself (1P), leave it with the partner, or test first? The tool compares the profit per unit of selling it "
+         "itself (1P), leave it with the partner, or test first? The tool compares the contribution per unit of selling it "
          "1P with the value of the 3P sale (commission less marketplace cost, plus the 1P substitute sales it does "
          "not take away), checks the return on the money tied up in stock, and ranks the products. The calculations "
          "are plain Python rules. A person accepts or overrides every recommendation. An LLM is optional and only "
@@ -131,18 +146,25 @@ def build() -> str:
          "| Item | Source |", "|---|---|",
          "| Listings | Real: public therange.co.uk listings (prices, who sells them), partner names replaced with "
          "labels. |",
-         "| Commission | Real, published: 13% to 15% by category. VAT 20%. |",
+         "| Commission | Real, published: 11% to 15% by category. VAT 20%. |",
          "| Units sold | Assumed: from a price curve per category (The Range shows almost no reviews). |",
          "| Costs | Assumed: cost of goods, pick-pack-deliver, returns, markdowns, days of stock, units a week, "
          "week-to-week demand swing, share of buyers who would otherwise buy The Range's own item. |",
-         "| Policy | Minimum yearly return on stock money " + f"{a.hurdle_rate:.0%}, holding cost {a.holding_rate:.0%} "
-         "a year. |",
+         "| Policy and assumptions | Minimum yearly return on stock " + f"{a.hurdle_rate:.0%} (Assumption: a firm sets its "
+         f"own bar). Physical holding cost {a.holding_rate:.0%} a year (storage, insurance and shrink only; cost of "
+         "capital is tested only by the hurdle). |",
          "| Where to change them | Sidebar sliders. |", ""]
     L += range_section()
     L += ["## Limits", "",
           "- A small sample of listings: a test of the method, not market sizing.",
           "- Units come from a price curve, and the cost benchmarks are judgement, not CDS data. Every £ figure "
           "scales with them; supplier cost is the number to get first.",
+          "- The 8% physical holding rate and the 25% hurdle are assumptions. There is no single published retail "
+          "bar used in the model.",
+          "- Where a product page showed a starting (From) price for a range of sizes or colours, that starting "
+          "price is used.",
+          "- The Range's own craft kits in the sample sit at a lower price than the marketplace kits, so the "
+          "1P substitute contribution in crafts can be negative (cannibalisation is then floored at zero).",
           "- The Range's pages were read with an automated page-reading tool, one at a time, no logins, robots.txt "
           "respected. What The Range's terms say about reuse of content is quoted on the data and method page.", "",
           FOOTER, ""]

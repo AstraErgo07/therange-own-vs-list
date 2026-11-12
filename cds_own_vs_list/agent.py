@@ -55,10 +55,10 @@ def build_prompt(c: dict, a: Assumptions) -> str:
 by a marketplace partner (3P) should be bought and stocked by The Range itself (1P), kept on the marketplace,
 or tested first. You support the decision; the manager makes it.
 
-Definitions: 1P contribution = ex-VAT price - cogs - fulfilment - returns - markdown - holding cost.
+Definitions: 1P contribution = ex-VAT price - cogs - fulfilment - returns - markdown - physical holding cost (storage, insurance, shrink; not cost of capital).
 3P contribution = shelf price x commission - marketplace cost. Net 3P = 3P contribution - diversion x the 1P
 contribution of The Range's own substitute (median price of its own listings in the category).
-Return on capital = annual 1P contribution / average stock value.
+Return on stock = annual 1P contribution / average stock value, tested against the hurdle (cost of capital sits here, not in contribution).
 
 NUMBERS (use ONLY these; do not invent costs, sales, competitor or seller facts):
 {nums}

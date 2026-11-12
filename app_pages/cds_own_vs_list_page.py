@@ -20,9 +20,11 @@ from common.text import VERSION  # noqa: E402
 from cds_own_vs_list.agent import explain  # noqa: E402
 from cds_own_vs_list.calc import (BRING_IN_HOUSE, CATEGORIES, COMMISSION_REAL, ESTIMATED_FIELDS,  # noqa: E402
                                   RECOMMENDATIONS, Assumptions, default_benchmarks, evaluate_portfolio,
-                                  gmv_vs_contribution_flags, load_listings, seller_summary, sensitivity,
-                                  substitute_prices)
-from cds_own_vs_list.workings import DECISION_RULES, own_vs_list_workings  # noqa: E402
+                                  gmv_vs_contribution_flags, hurdle_sensitivity, load_listings, seller_summary,
+                                  sensitivity, substitute_prices)
+from cds_own_vs_list.insights import category_breakdown, insights  # noqa: E402
+from cds_own_vs_list.workings import (DECISION_RULES, HOLDING_SPLIT_TEXT, HURDLE_TEXT,  # noqa: E402
+                                      decision_rules, own_vs_list_workings)
 
 DATA = ROOT / "cds_own_vs_list" / "range_listings.csv"
 LOG = ROOT / "cds_own_vs_list" / "decisions.csv"
@@ -35,8 +37,10 @@ def sidebar() -> Assumptions:
     sb = st.sidebar
     sb.header("Assumptions")
     sb.caption("🟢 = real/published  ·  🟠 = estimate (category benchmark)  ·  ⚙️ = policy")
-    hurdle = sb.slider("⚙️ Minimum yearly return on money tied up in stock", 0.0, 1.0, d.hurdle_rate, 0.01, format="%.2f")
-    holding = sb.slider("⚙️ Holding rate (annual, % of stock cost)", 0.0, 0.5, d.holding_rate, 0.01, format="%.2f")
+    hurdle = sb.slider("🟠 Minimum yearly return on money tied up in stock (hurdle)", 0.0, 3.0, d.hurdle_rate, 0.01, format="%.2f")
+    sb.caption("Assumption. Firms set their own bar (cost of capital plus a cushion). 25% is my starting point, not a published standard. See the hurdle note on the page.")
+    holding = sb.slider("🟠 Physical holding rate (storage, insurance and shrink, % of stock cost a year)", 0.0, 0.5, d.holding_rate, 0.01, format="%.2f")
+    sb.caption("Assumption. Cost of capital is not in this figure; it is tested only by the hurdle. See the method note on the page.")
     mkt = sb.slider("⚙️ Marketplace cost per 3P unit (£)", 0.0, 3.0, d.marketplace_cost_per_unit, 0.05)
     vat = sb.slider("🟢 VAT rate (shelf prices include it)", 0.0, 0.25, d.vat_rate, 0.01, format="%.2f")
     sb.subheader("⚙️ Diversion rate by category")
@@ -52,7 +56,7 @@ def sidebar() -> Assumptions:
             bench[c] = replace(
                 b,
                 cogs_pct=st.slider("Cost price, % of ex-VAT price", 0.1, 0.9, b.cogs_pct, 0.01, key=f"b_cogs_{c}"),
-                fulfilment_cost=st.slider("Fulfilment £/unit", 0.0, 15.0, b.fulfilment_cost, 0.25, key=f"b_ful_{c}"),
+                fulfilment_cost=st.slider("Fulfilment £/unit", 0.0, 80.0, b.fulfilment_cost, 0.25, key=f"b_ful_{c}"),
                 return_rate=st.slider("Return rate", 0.0, 0.3, b.return_rate, 0.01, key=f"b_ret_{c}"),
                 markdown_rate=st.slider("Markdown rate", 0.0, 0.4, b.markdown_rate, 0.01, key=f"b_md_{c}"),
                 stock_cover_days=st.slider("Stock cover (days)", 7, 180, int(b.stock_cover_days), 1, key=f"b_cov_{c}"),
@@ -85,7 +89,7 @@ def table(res: pd.DataFrame) -> pd.DataFrame:
         "🟠 Est. units/year": units.round(0),
         "🟢 Avg selling price per unit (£)": res["price"].round(2),
         "🟠 Est. GMV/year (£)": res["gmv_annual"].round(0),
-        "🟠 1P profit £/unit": res["contrib_1p_unit"].round(2), "🟠 3P value £/unit": res["net_3p_unit"].round(2),
+        "🟠 1P contribution £/unit": res["contrib_1p_unit"].round(2), "🟠 3P value £/unit": res["net_3p_unit"].round(2),
         "🟠 1P advantage £/yr": res["advantage_1p_annual"].round(0),
         "🟠 Return on stock money %": (res["return_on_capital"] * 100).round(0), "Recommendation": res["recommendation"],
     })
@@ -116,12 +120,25 @@ counts = res["recommendation"].value_counts()
 for col, rec in zip(st.columns(3), RECOMMENDATIONS):
     col.metric(rec, int(counts.get(rec, 0)))
 
+st.subheader("Insights from this sample")
+st.caption("These observations are taken from the model at the default assumptions, not from the sliders. "
+           "Every claim is worded as a finding in this sample under those assumptions, not as a business result.")
+default_a = Assumptions()
+for bullet in insights(listings, default_a):
+    st.markdown(f"- {bullet}")
+with st.expander("Counts by category at the default assumptions"):
+    st.dataframe(category_breakdown(evaluate_portfolio(listings, default_a)), hide_index=True, width="stretch")
+with st.expander("How holding cost and the hurdle are split (method)"):
+    st.markdown(HOLDING_SPLIT_TEXT)
+with st.expander("Why the hurdle is 25%, and what a typical bar looks like"):
+    st.markdown(HURDLE_TEXT)
+
 st.subheader("Ranked marketplace (3P) products")
-st.caption("GMV = units × average selling price (the shelf price). Ranked by 1P advantage a year = (1P profit "
+st.caption("GMV = units × average selling price (the shelf price). Ranked by 1P advantage a year = (1P contribution "
            "per unit − 3P value per unit) × units a year. Click a row to see its workings and the drafted reasoning.")
 with st.expander("How these numbers are worked out"):
     st.markdown("Decision rules, in order:")
-    for r in DECISION_RULES:
+    for r in decision_rules(a):
         st.markdown(f"- {r}")
     st.markdown("Worked example: the top-ranked product with the current sliders. Pick any product further down "
                 "the page to see its own workings.")
@@ -134,10 +151,10 @@ event = st.dataframe(table(res), hide_index=True, width="stretch", on_select="re
                                     "🟠 Est. GMV/year (£)": st.column_config.NumberColumn(format="£%d")})
 
 flags = gmv_vs_contribution_flags(res, a)
-st.subheader("Products with big sales where the profit maths still says keep them 3P")
+st.subheader("Products with big sales where the contribution maths still says keep them 3P")
 with st.container(border=True):
     st.caption(f"Estimated GMV in the top quartile (≥ £{res['gmv_annual'].quantile(a.gmv_flag_quantile):,.0f}/yr) "
-               "but the profit per unit and return on stock do not recommend 'Bring in-house'.")
+               "but contribution per unit and return on stock do not recommend 'Bring in-house'.")
     if flags.empty:
         st.success("None at the current assumptions.")
     else:
@@ -150,8 +167,16 @@ st.caption("Diversion rows set every category to that rate (the share of partner
            "The Range's own item). COGS (cost of goods) rows move every category's cost-price estimate by ±10 points. Cost is the biggest unknown without supplier data.")
 st.dataframe(summ.rename(columns={"scenario": "Scenario", "flipped_vs_current": "Flipped vs current"}),
              hide_index=True, width="stretch")
+st.markdown("**If only the return-on-stock hurdle changes**")
+st.caption("25%, 50% and 100% are illustration points, not industry standards. 150% and 200% are included "
+           "because in this sample the lower bars often do not change the answer. Compared with the hurdle "
+           "currently set in the sidebar.")
+hsumm, hflipped, _ = hurdle_sensitivity(listings, a, hurdles=(0.25, 0.50, 1.00, 1.50, 2.00))
+st.dataframe(hsumm.drop(columns=["hurdle"]).rename(
+    columns={"scenario": "Scenario", "flipped_vs_current": "Flipped vs current"}),
+    hide_index=True, width="stretch")
 with st.expander("Which products flip?"):
-    for k, items in flipped.items():
+    for k, items in {**flipped, **hflipped}.items():
         st.markdown(f"**{k}:** " + (", ".join(items) if items else "no changes"))
 
 # Detail ---------------------------------------------------------------------
@@ -233,7 +258,9 @@ with st.expander("Data sources and assumptions (short version; full page in the 
 - **Estimated (🟠):** cost price, fulfilment, returns, markdown, stock cover, weekly units, demand volatility:
   category benchmarks (my judgement for UK value home retail, not CDS data). The Range shows almost no review
   counts, so units come from a price curve, not reviews.
-- **Policy settings:** hurdle rate, holding rate, diversion rates, marketplace cost per unit.
+- **Assumptions (🟠):** physical holding rate (storage, insurance and shrink only; default 8%);
+  hurdle on return on stock (default 25%, a firm's own bar, not a published standard); diversion rates;
+  marketplace cost per unit. Cost of capital is not subtracted from contribution; it is tested only by the hurdle.
 """)
 
 st.subheader("Decision log (cds_own_vs_list/decisions.csv)")

@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass, field, replace
 
 import pandas as pd
 
-CATEGORIES = ["home textiles", "kitchen", "outdoor", "beauty"]
+CATEGORIES = ["home textiles", "kitchen", "outdoor", "beauty", "furniture", "lighting", "pets", "crafts"]
 BRING_IN_HOUSE, KEEP_3P, TEST_3P_FIRST = "Bring in-house", "Keep 3P", "Test as 3P first"
 RECOMMENDATIONS = [BRING_IN_HOUSE, TEST_3P_FIRST, KEEP_3P]
 EPSILON = 0.01
@@ -31,6 +31,10 @@ COMMISSION_REAL = {
                              # if classed as Technology & Appliances it would be 13%)
     "outdoor": 0.14,         # Outdoor Living 14%
     "beauty": 0.13,          # Health & Beauty 13%
+    "furniture": 0.13,       # Furniture 13%
+    "lighting": 0.13,        # Lighting 13%
+    "pets": 0.11,            # Pets 11%
+    "crafts": 0.13,          # Arts & Crafts 13%
 }
 
 ESTIMATED_FIELDS = ["cogs", "fulfilment_cost", "return_rate", "markdown_rate",
@@ -55,19 +59,26 @@ class Benchmark:
 
 def default_benchmarks() -> dict:
     return {
-        # cogs_pct is a share of the EX-VAT price
+        # cogs_pct is a share of the EX-VAT price. All of these are estimates (my judgement
+        # for UK value home retail, not CDS data).
         "home textiles": Benchmark(0.40, 3.00, 0.05, 0.15, 75, 25, 15.0, 1.0, 0.35),
         "kitchen":       Benchmark(0.65, 7.50, 0.08, 0.07, 45, 12, 50.0, 1.2, 0.30),  # branded small electricals
         "outdoor":       Benchmark(0.40, 3.50, 0.06, 0.20, 90, 15, 15.0, 1.0, 0.55),  # seasonal -> volatile
         "beauty":        Benchmark(0.65, 3.00, 0.06, 0.08, 50, 6, 40.0, 1.0, 0.30),   # branded hair electricals
+        "furniture":     Benchmark(0.55, 45.00, 0.10, 0.15, 120, 3, 400.0, 1.0, 0.40),  # bulky sofas; two-person delivery
+        "lighting":      Benchmark(0.45, 4.50, 0.08, 0.12, 60, 12, 25.0, 1.0, 0.35),  # indoor table lamps
+        "pets":          Benchmark(0.45, 5.00, 0.06, 0.10, 50, 10, 25.0, 1.0, 0.30),  # pet beds
+        "crafts":        Benchmark(0.40, 3.00, 0.04, 0.10, 70, 8, 15.0, 1.0, 0.40),   # craft kits, long-tail
     }
 
 
 @dataclass
 class Assumptions:
-    holding_rate: float = 0.20                  # annual cost of holding stock, % of cost
+    holding_rate: float = 0.08                  # physical storage, insurance and shrink only, % of cost a year
+                                                # (Assumption). Cost of capital is not in this figure;
+                                                # it is tested only by hurdle_rate on return on stock.
     vat_rate: float = 0.20                      # REAL: UK standard VAT; shelf prices include it
-    hurdle_rate: float = 0.25                   # minimum return on capital to go 1P
+    hurdle_rate: float = 0.25                   # minimum return on stock to go 1P (Assumption: cost of capital plus a cushion)
     marketplace_cost_per_unit: float = 0.50     # cost to serve one 3P sale (£)
     diversion_rates: dict = field(default_factory=lambda: {c: 0.30 for c in CATEGORIES})
     volatility_cv_threshold: float = 0.50
@@ -87,6 +98,9 @@ class Assumptions:
         b = {c: replace(v, cogs_pct=min(max(v.cogs_pct + pts, 0.05), 0.95)) for c, v in self.benchmarks.items()}
         return replace(self, benchmarks=b)
 
+    def with_hurdle(self, rate):
+        return replace(self, hurdle_rate=rate)
+
     def to_json(self):
         d = asdict(self)
         return json.dumps(d, sort_keys=True, default=str)
@@ -96,7 +110,12 @@ class Assumptions:
 # Core formulas (unchanged from the original Own vs List)
 # ---------------------------------------------------------------------------
 def holding_cost(cogs, stock_cover_days, holding_rate):
-    """= cogs x holding_rate x stock_cover_days / 365"""
+    """Physical holding cost per unit: cogs x physical holding rate x days of stock / 365.
+
+    holding_rate here is storage, insurance and shrink only. Cost of capital is not
+    subtracted from contribution; it is tested only by comparing return on stock
+    with the hurdle. That avoids counting the cost of money twice.
+    """
     return cogs * holding_rate * stock_cover_days / 365.0
 
 
@@ -255,6 +274,26 @@ def sensitivity(listings, a: Assumptions, rates=(0.10, 0.30, 0.50), cogs_shifts=
         ch = recs[recs != base]
         flipped[name] = [f"{k}: {base[k]} -> {recs[k]}" for k in ch.index]
         row = {"scenario": name}
+        row.update({rec: int((recs == rec).sum()) for rec in RECOMMENDATIONS})
+        row["flipped_vs_current"] = len(ch)
+        rows.append(row)
+    return pd.DataFrame(rows), flipped, base
+
+
+def hurdle_sensitivity(listings, a: Assumptions, hurdles=(0.25, 0.50, 1.00)):
+    """How recommendations change when only the return-on-stock hurdle moves.
+
+    Default hurdles are 25%, 50% and 100%. These are not industry standards;
+    they show how sensitive the answer is to a bar the firm would set itself.
+    """
+    base = evaluate_portfolio(listings, a).set_index("sku")["recommendation"]
+    rows, flipped = [], {}
+    for h in hurdles:
+        name = f"Hurdle {h:.0%}"
+        recs = evaluate_portfolio(listings, a.with_hurdle(h)).set_index("sku")["recommendation"].reindex(base.index)
+        ch = recs[recs != base]
+        flipped[name] = [f"{k}: {base[k]} -> {recs[k]}" for k in ch.index]
+        row = {"scenario": name, "hurdle": h}
         row.update({rec: int((recs == rec).sum()) for rec in RECOMMENDATIONS})
         row["flipped_vs_current"] = len(ch)
         rows.append(row)

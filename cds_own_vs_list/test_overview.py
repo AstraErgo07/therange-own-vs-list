@@ -17,7 +17,7 @@ class TestOverview(unittest.TestCase):
                          "docs/OVERVIEW.md is out of date: run python tools/build_overview.py")
 
     def test_footer_and_version(self):
-        self.assertEqual(VERSION, "v1.0")
+        self.assertEqual(VERSION, "v1.1")
         self.assertIn("Made by Ami Sata.", FOOTER)
         for bad in ("\u2014", "\u2013"):
             self.assertNotIn(bad, build())

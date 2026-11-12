@@ -18,7 +18,7 @@ import pandas as pd
 HERE = Path(__file__).parent
 RAW = HERE.parent / "data" / "raw" / "range_products_raw.jsonl"
 OUT = HERE / "range_listings.csv"
-PREFIX = {"home textiles": "HT", "kitchen": "KT", "outdoor": "OD", "beauty": "BT"}
+PREFIX = {"home textiles": "HT", "kitchen": "KT", "outdoor": "OD", "beauty": "BT", "furniture": "FU", "lighting": "LT", "pets": "PT", "crafts": "CR"}
 
 
 def build() -> pd.DataFrame:
