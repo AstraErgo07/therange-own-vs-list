@@ -70,10 +70,13 @@ def range_section() -> list[str]:
     listings = load_listings(ROOT / "cds_own_vs_list" / "range_listings.csv")
     res = evaluate_portfolio(listings, a)
     counts = res["recommendation"].value_counts()
+    n_3p = int((listings.listing_type == "3P").sum())
+    n_1p = int((listings.listing_type == "1P").sum())
+    n_cats = int(listings["category"].nunique())
     out = ["## Summary at the default settings", "",
-           f"{len(listings)} therange.co.uk listings: {(listings.listing_type == '3P').sum()} sold by marketplace "
-           f"partners (the candidates) and {(listings.listing_type == '1P').sum()} sold by The Range (used as the "
-           "substitute a buyer might otherwise choose). Partner names are replaced with labels. Default settings: "
+           f"{n_3p} marketplace listings are assessed across {n_cats} categories. {n_1p} of The Range's own "
+           "items are used only as price and contribution comparisons (substitutes), not assessed. "
+           "Partner names are replaced with labels. Default recommendations on the listings assessed: "
            + ", ".join(f"{r} {counts.get(r, 0)}" for r in RECOMMENDATIONS) + ".", "",
            "Decision rules, in order:", ""]
     out += [f"{i}. {r}" for i, r in enumerate(decision_rules(a), 1)] + [""]
@@ -144,8 +147,8 @@ def build() -> str:
          "drafts the explanation.", "",
          "## What is real and what is assumed", "",
          "| Item | Source |", "|---|---|",
-         "| Listings | Real: public therange.co.uk listings (prices, who sells them), partner names replaced with "
-         "labels. |",
+         "| Listings | Real: 47 marketplace listings assessed across eight categories. 35 of The Range's own "
+         "items are used only as substitutes, not assessed. Partner names replaced with labels. |",
          "| Commission | Real, published: 11% to 15% by category. VAT 20%. |",
          "| Units sold | Assumed: from a price curve per category (The Range shows almost no reviews). |",
          "| Costs | Assumed: cost of goods, pick-pack-deliver, returns, markdowns, days of stock, units a week, "

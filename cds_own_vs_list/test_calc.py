@@ -141,6 +141,9 @@ class TestCdsCalc(unittest.TestCase):
         res = evaluate_portfolio(listings, a)
         text = "\n".join(insights(listings, a))
         self.assertIn("in this sample, under these assumptions", text.lower())
+        self.assertIn("47 marketplace listings are assessed across 8 categories", text)
+        self.assertIn("35 of The Range's own items are used only as price and contribution comparisons (substitutes), not assessed", text)
+        self.assertNotIn("82 listings", text)
         c = res["recommendation"].value_counts()
         self.assertIn(f"{BRING_IN_HOUSE} {int(c[BRING_IN_HOUSE])}", text)
         self.assertIn(f"{KEEP_3P} {int(c[KEEP_3P])}", text)
@@ -154,6 +157,41 @@ class TestCdsCalc(unittest.TestCase):
         self.assertFalse(disagreement(res, a).empty)
         for bad in ("\u2014", "\u2013"):
             self.assertNotIn(bad, text)
+
+
+    def test_8_category_selector_helpers_and_filtered_insights(self):
+        from pathlib import Path
+        from calc import evaluate_portfolio, load_listings
+        from category_nav import (ALL, category_slug, filter_results, listings_for_view,
+                                  parse_category_param, selector_label, selector_options)
+        from insights import assessed_table, insights
+        listings = load_listings(Path(__file__).parent / "range_listings.csv")
+        a = Assumptions()
+        res = evaluate_portfolio(listings, a)
+        self.assertEqual(parse_category_param(None), ALL)
+        self.assertEqual(parse_category_param("lighting"), "lighting")
+        self.assertEqual(parse_category_param("Home-Textiles"), "home textiles")
+        self.assertEqual(parse_category_param("all"), ALL)
+        self.assertEqual(parse_category_param("not-a-category"), ALL)
+        self.assertEqual(category_slug("home textiles"), "home-textiles")
+        self.assertEqual(category_slug(ALL), "all")
+        self.assertEqual(selector_label("lighting", listings), "Lighting (6)")
+        self.assertEqual(selector_label(ALL, listings), "All categories")
+        self.assertEqual(selector_options(listings)[0], ALL)
+        view = filter_results(res, "lighting")
+        self.assertTrue((view["category"] == "lighting").all())
+        self.assertEqual(len(view), 6)
+        self.assertEqual(list(view["rank"]), list(range(1, 7)))
+        slice_l = listings_for_view(listings, "lighting")
+        self.assertEqual(set(slice_l["category"]), {"lighting"})
+        text = "\n".join(insights(listings, a, category="lighting"))
+        self.assertIn("6 marketplace listings are assessed in lighting", text)
+        self.assertIn("every lighting marketplace listing", text)
+        self.assertNotIn("every furniture marketplace listing", text)
+        self.assertNotIn("every outdoor marketplace listing", text)
+        tab = assessed_table(res)
+        self.assertEqual(int(tab[tab.Category == "All categories"]["Listings assessed"].iloc[0]), 47)
+        self.assertEqual(int(tab[tab.Category == "lighting"]["Listings assessed"].iloc[0]), 6)
 
     def test_7_zero_and_missing_data(self):
         from calc import holding_cost, return_on_capital, average_inventory_value, estimate_weekly_units, ex_vat, net_3p_benefit

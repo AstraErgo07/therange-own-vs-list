@@ -7,7 +7,7 @@ less marketplace cost, allowing for sales of The Range's own similar items), che
 tied up in stock against a hurdle, and ranks the products. A person accepts or overrides every recommendation, with
 a reason for an override, and each decision is logged.
 
-Built on 82 public therange.co.uk listings across eight categories (partner names replaced with labels), The Range's
+Built on 47 marketplace listings assessed across eight categories, plus 35 of The Range's own items used only as price and contribution comparisons (substitutes), not assessed (partner names replaced with labels). The Range's
 published marketplace commission and labelled estimates for the costs The Range does not publish. A small sample: a
 test of the method, not market sizing.
 
@@ -37,6 +37,7 @@ A plain-text write-up with every number at the default settings is in `docs/OVER
 - Units a year come from a price curve per category, because The Range shows almost no reviews.
 - Decision rules, in order: test first if demand swings a lot or the answer is too close to call; bring in-house if
   1P makes more contribution per unit and the return on stock beats the hurdle; otherwise keep it 3P.
+- A category selector at the top (All categories, or one of the eight, with a count) filters the ranking, insights, decision view and sensitivity. A link such as `?category=lighting` opens that category.
 - The app has an Insights section with factual observations from the model at the default assumptions, and a
   sensitivity view for the hurdle at 25%, 50%, 100%, 150% and 200%.
 - An LLM is optional (`OPENAI_API_KEY`) and only drafts the explanation. Without a key the rules write it.

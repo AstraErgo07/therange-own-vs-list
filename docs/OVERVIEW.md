@@ -12,7 +12,7 @@ For each product a marketplace partner sells on therange.co.uk (3P), should The 
 
 | Item | Source |
 |---|---|
-| Listings | Real: public therange.co.uk listings (prices, who sells them), partner names replaced with labels. |
+| Listings | Real: 47 marketplace listings assessed across eight categories. 35 of The Range's own items are used only as substitutes, not assessed. Partner names replaced with labels. |
 | Commission | Real, published: 11% to 15% by category. VAT 20%. |
 | Units sold | Assumed: from a price curve per category (The Range shows almost no reviews). |
 | Costs | Assumed: cost of goods, pick-pack-deliver, returns, markdowns, days of stock, units a week, week-to-week demand swing, share of buyers who would otherwise buy The Range's own item. |
@@ -21,7 +21,7 @@ For each product a marketplace partner sells on therange.co.uk (3P), should The 
 
 ## Summary at the default settings
 
-82 therange.co.uk listings: 47 sold by marketplace partners (the candidates) and 35 sold by The Range (used as the substitute a buyer might otherwise choose). Partner names are replaced with labels. Default settings: Bring in-house 21, Test as 3P first 8, Keep 3P 18.
+47 marketplace listings are assessed across 8 categories. 35 of The Range's own items are used only as price and contribution comparisons (substitutes), not assessed. Partner names are replaced with labels. Default recommendations on the listings assessed: Bring in-house 21, Test as 3P first 8, Keep 3P 18.
 
 Decision rules, in order:
 
@@ -34,7 +34,7 @@ Decision rules, in order:
 
 Every point below is taken from the model at these default assumptions, and is worded as a finding in this sample under those assumptions, not as a business result.
 
-- In this sample, under these assumptions, 82 listings (47 sold by marketplace partners, 35 sold by The Range as substitutes) give: Bring in-house 21, Test as 3P first 8, Keep 3P 18. These are model results on a small public sample, not a forecast of revenue.
+- In this sample, under these assumptions, 47 marketplace listings are assessed across 8 categories. 35 of The Range's own items are used only as price and contribution comparisons (substitutes), not assessed. Recommendations: Bring in-house 21, Test as 3P first 8, Keep 3P 18. These are model results on a small public sample, not a forecast of revenue.
 - In this sample, under these assumptions, beauty splits 3 Bring in-house, 3 Test as 3P first, 1 Keep 3P. The ones recommended in-house are the dearer listings (£99.58 to £179.95); the cheaper one (£29.99) stays 3P, where fulfilment of £3.00 eats more of the 1P contribution.
 - In this sample, under these assumptions, crafts splits 4 Bring in-house, 1 Test as 3P first.
 - In this sample, under these assumptions, every furniture marketplace listing (6) comes out as Keep 3P: 3P is worth more contribution per unit (and for some, return on stock is below the hurdle too). Estimated pick, pack and delivery is £45.00 a unit. 3 of the 6 have negative 1P contribution after that cost. On the dearest listing, 3P commission alone is £105.30 before cost to serve.

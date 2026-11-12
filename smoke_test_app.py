@@ -23,6 +23,33 @@ try:
     assert sum(any("Avg selling price per unit" in c for c in cs) for cs in cols) >= 2, cols
     assert any(e.label == "How these numbers are worked out" for e in at.expander)
     assert any("1P contribution per unit" in str(t.value.to_dict()) for t in at.table)
+    # unambiguous counts and a category selector
+    page_text = " ".join(getattr(m, "value", "") or "" for m in list(at.markdown) + list(at.caption) + list(at.info))
+    assert "47 marketplace listings assessed across 8 categories" in page_text, page_text[:500]
+    assert "35 of The Range's own items are used only as price/contribution comparisons" in page_text
+    assert "not assessed" in page_text
+    segs = list(at.segmented_control)
+    assert segs, "expected a category segmented control"
+    labels = []
+    for s in segs:
+        opts = getattr(s, "options", None) or getattr(s, "value", None)
+        labels.append((getattr(s, "label", None), opts, str(s)))
+    print("segmented_control:", labels)
+    # open lighting via the query param used by the selector
+    at2 = AppTest.from_file(PAGE, default_timeout=60)
+    at2.query_params["category"] = "lighting"
+    at2.run()
+    assert not at2.exception, [e.value for e in at2.exception]
+    # ranking table should only show lighting (6 marketplace listings)
+    lighting_ok = False
+    for d in at2.dataframe:
+        cs = list(d.value.columns)
+        if "Category" in cs and "SKU" in cs:
+            cats = set(d.value["Category"].astype(str))
+            print("filtered table categories:", cats, "rows", len(d.value))
+            if cats and cats <= {"lighting"} and len(d.value) == 6:
+                lighting_ok = True
+    assert lighting_ok, "query param ?category=lighting should show 6 lighting rows"
     # override without a reason -> error; accept -> log written
     [b for b in at.button if b.key and b.key.startswith("cds_ovr_")][0].click().run()
     print("override w/o reason errors:", [e.value for e in at.error])

@@ -25,8 +25,8 @@ two categories rest on the individual product pages only.
 
 ## Data
 
-- 82 therange.co.uk listings: 47 sold by marketplace partners (3P), which are the decision candidates, and 35 sold by
-  The Range (1P), used as substitutes. Pages were read with an automated page-reading tool, one at a time, no logins,
+- 47 marketplace listings are assessed across eight categories. 35 of The Range's own items are used only as
+  price and contribution comparisons (substitutes), not assessed. Pages were read with an automated page-reading tool, one at a time, no logins,
   robots.txt respected. Of the original 44, 6 product pages were read directly ("verified") and the rest came from
   search-engine snapshots, with some prices later checked against live category pages (see the 11 Nov 2026 notes
   below). All 38 listings added on 12 Nov 2026 were read directly. Live prices are used wherever they were read.

@@ -22,7 +22,11 @@ from cds_own_vs_list.calc import (BRING_IN_HOUSE, CATEGORIES, COMMISSION_REAL, E
                                   RECOMMENDATIONS, Assumptions, default_benchmarks, evaluate_portfolio,
                                   gmv_vs_contribution_flags, hurdle_sensitivity, load_listings, seller_summary,
                                   sensitivity, substitute_prices)
-from cds_own_vs_list.insights import category_breakdown, insights  # noqa: E402
+from cds_own_vs_list.insights import assessed_table, insights  # noqa: E402
+from cds_own_vs_list.category_nav import (  # noqa: E402
+    ALL, category_slug, filter_results, listings_for_view, parse_category_param,
+    selector_label, selector_options,
+)
 from cds_own_vs_list.workings import (DECISION_RULES, HOLDING_SPLIT_TEXT, HURDLE_TEXT,  # noqa: E402
                                       decision_rules, own_vs_list_workings)
 
@@ -97,13 +101,17 @@ def table(res: pd.DataFrame) -> pd.DataFrame:
 a = sidebar()
 try:
     listings = load_listings(DATA)
-    res = evaluate_portfolio(listings, a)
-    subs = substitute_prices(listings)
+    res_all = evaluate_portfolio(listings, a)
+    subs_all = substitute_prices(listings)
 except Exception:   # show the problem on the page instead of a blank or crashed app
     st.error("Something went wrong loading or calculating the data. Details:")
     st.code(traceback.format_exc())
     st.caption(f"Own vs List {VERSION}")
     st.stop()
+
+n_3p = int((listings.listing_type == "3P").sum())
+n_1p = int((listings.listing_type == "1P").sum())
+n_cats = int(listings["category"].nunique())
 
 st.title("Own vs List: The Range (CDS)")
 st.caption(f"Own vs List {VERSION}")
@@ -111,10 +119,39 @@ st.markdown("Should The Range buy and stock (1P) a product that a marketplace pa
             "on the marketplace, or test first? Built on real The Range listings, with labelled estimates for the "
             "costs The Range does not publish. The calculations are plain-Python rules; an LLM, if configured, only "
             "drafts the explanation. You make the call. Small sample: a test of the method, not market sizing.")
-st.info(f"Real: {len(listings)} therange.co.uk listings ({(listings.listing_type == '3P').sum()} marketplace, "
-        f"{(listings.listing_type == '1P').sum()} sold by The Range): price, sold-by, seller (labelled); published commission "
-        "rates; The Range's own substitute prices. Estimated (🟠): " + ", ".join(ESTIMATED_FIELDS) +
-        ". Category benchmarks can be changed in the sidebar.", icon="ℹ️")
+
+# Category selector (query param ?category=lighting or ?category=home-textiles)
+qp = st.query_params.get("category")
+parsed = parse_category_param(qp)
+if "cds_cat" not in st.session_state:
+    st.session_state["cds_cat"] = parsed
+picked_cat = st.segmented_control(
+    "Category",
+    selector_options(listings),
+    format_func=lambda k: selector_label(k, listings),
+    key="cds_cat",
+    required=True,
+) or ALL
+st.query_params["category"] = category_slug(picked_cat)
+
+view = filter_results(res_all, picked_cat)
+view_listings = listings_for_view(listings, picked_cat)
+subs = substitute_prices(view_listings)
+res = view  # ranking, decision view, flags, sellers and sensitivity use the current view
+
+st.markdown(
+    f"**{n_3p} marketplace listings assessed across {n_cats} categories.** "
+    f"{n_1p} of The Range's own items are used only as price/contribution comparisons "
+    f"(substitutes), not assessed."
+)
+if picked_cat != ALL:
+    shown_3p = int((view_listings.listing_type == "3P").sum())
+    shown_1p = int((view_listings.listing_type == "1P").sum())
+    st.caption(f"Showing {picked_cat}: {shown_3p} marketplace listings assessed. "
+               f"{shown_1p} of The Range's own items in this category are substitutes, not assessed.")
+st.caption("Published: prices, who sells them, seller labels, commission rates. Estimated (🟠): "
+           + ", ".join(ESTIMATED_FIELDS) + ". Category benchmarks can be changed in the sidebar.")
+st.dataframe(assessed_table(res_all), hide_index=True, width="stretch")
 
 counts = res["recommendation"].value_counts()
 for col, rec in zip(st.columns(3), RECOMMENDATIONS):
@@ -122,12 +159,12 @@ for col, rec in zip(st.columns(3), RECOMMENDATIONS):
 
 st.subheader("Insights from this sample")
 st.caption("These observations are taken from the model at the default assumptions, not from the sliders. "
-           "Every claim is worded as a finding in this sample under those assumptions, not as a business result.")
+           "Every claim is worded as a finding in this sample under those assumptions, not as a business result. "
+           "When a category is selected, the points below are for that category only.")
 default_a = Assumptions()
-for bullet in insights(listings, default_a):
+insight_cat = None if picked_cat == ALL else picked_cat
+for bullet in insights(listings, default_a, category=insight_cat):
     st.markdown(f"- {bullet}")
-with st.expander("Counts by category at the default assumptions"):
-    st.dataframe(category_breakdown(evaluate_portfolio(listings, default_a)), hide_index=True, width="stretch")
 with st.expander("How holding cost and the hurdle are split (method)"):
     st.markdown(HOLDING_SPLIT_TEXT)
 with st.expander("Why the hurdle is 25%, and what a typical bar looks like"):
@@ -162,16 +199,17 @@ with st.container(border=True):
         st.dataframe(table(flags).drop(columns=["Rank"]), hide_index=True, width="stretch")
 
 st.subheader("Sensitivity: how many recommendations flip?")
-summ, flipped, _ = sensitivity(listings, a)
-st.caption("Diversion rows set every category to that rate (the share of partner buyers who would otherwise buy "
-           "The Range's own item). COGS (cost of goods) rows move every category's cost-price estimate by ±10 points. Cost is the biggest unknown without supplier data.")
+summ, flipped, _ = sensitivity(view_listings, a)
+st.caption("Figures below are for the category in the selector. Diversion rows set every included category "
+           "to that rate (the share of partner buyers who would otherwise buy The Range's own item). "
+           "COGS (cost of goods) rows move the cost-price estimate by ±10 points. Cost is the biggest unknown without supplier data.")
 st.dataframe(summ.rename(columns={"scenario": "Scenario", "flipped_vs_current": "Flipped vs current"}),
              hide_index=True, width="stretch")
 st.markdown("**If only the return-on-stock hurdle changes**")
 st.caption("25%, 50% and 100% are illustration points, not industry standards. 150% and 200% are included "
            "because in this sample the lower bars often do not change the answer. Compared with the hurdle "
            "currently set in the sidebar.")
-hsumm, hflipped, _ = hurdle_sensitivity(listings, a, hurdles=(0.25, 0.50, 1.00, 1.50, 2.00))
+hsumm, hflipped, _ = hurdle_sensitivity(view_listings, a, hurdles=(0.25, 0.50, 1.00, 1.50, 2.00))
 st.dataframe(hsumm.drop(columns=["hurdle"]).rename(
     columns={"scenario": "Scenario", "flipped_vs_current": "Flipped vs current"}),
     hide_index=True, width="stretch")
@@ -182,6 +220,8 @@ with st.expander("Which products flip?"):
 # Detail ---------------------------------------------------------------------
 st.subheader("Product detail and your decision")
 skus = res["sku"].tolist()
+if st.session_state.get("cds_pick") not in skus and "cds_pick" in st.session_state:
+    del st.session_state["cds_pick"]
 rows = event.selection.rows if event is not None and hasattr(event, "selection") else []
 picked = skus[rows[0]] if rows else None
 if picked and st.session_state.get("_cds_last") != picked:
@@ -244,7 +284,7 @@ st.caption("Avg selling price per unit = the seller's GMV ÷ their units, so it 
 with st.expander("The Range's own (1P) listings used as substitutes (real)"):
     st.caption("Median price per category = the 1P substitute in the cannibalisation calculation.")
     st.write({k: f"£{v:.2f}" for k, v in subs.items()})
-    st.dataframe(listings[listings.listing_type == "1P"][["sku", "category", "title", "price", "url"]],
+    st.dataframe(view_listings[view_listings.listing_type == "1P"][["sku", "category", "title", "price", "url"]],
                  hide_index=True, width="stretch")
 
 with st.expander("Data sources and assumptions (short version; full page in the menu)"):

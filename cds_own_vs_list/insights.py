@@ -45,11 +45,44 @@ def category_breakdown(res: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("Category").reset_index(drop=True)
 
 
+def assessed_table(res: pd.DataFrame, categories=None) -> pd.DataFrame:
+    """Compact table: category, listings assessed, in-house, test first, keep 3P."""
+    try:
+        from .calc import CATEGORIES
+    except ImportError:
+        from calc import CATEGORIES
+    categories = list(categories) if categories is not None else list(CATEGORIES)
+    rows = []
+    for cat in categories:
+        g = res[res["category"] == cat]
+        if g.empty:
+            continue
+        rows.append({
+            "Category": cat,
+            "Listings assessed": len(g),
+            BRING_IN_HOUSE: int((g["recommendation"] == BRING_IN_HOUSE).sum()),
+            TEST_3P_FIRST: int((g["recommendation"] == TEST_3P_FIRST).sum()),
+            KEEP_3P: int((g["recommendation"] == KEEP_3P).sum()),
+        })
+    if len(rows) > 1:
+        rows.append({
+            "Category": "All categories",
+            "Listings assessed": sum(r["Listings assessed"] for r in rows),
+            BRING_IN_HOUSE: sum(r[BRING_IN_HOUSE] for r in rows),
+            TEST_3P_FIRST: sum(r[TEST_3P_FIRST] for r in rows),
+            KEEP_3P: sum(r[KEEP_3P] for r in rows),
+        })
+    return pd.DataFrame(rows)
+
+
 def disagreement(res: pd.DataFrame, a: Assumptions) -> pd.DataFrame:
     """Products where contribution per unit and return on stock disagree on the 1P case."""
     m = res["contrib_1p_unit"] > res["net_3p_unit"]
     r = res["return_on_capital"] > a.hurdle_rate
     out = res[(m != r)].copy()
+    if out.empty:
+        out["disagreement"] = pd.Series(dtype="object")
+        return out
     out["disagreement"] = [
         "1P wins on contribution, return on stock is below the hurdle" if mi and not ri
         else "return on stock clears the hurdle, 3P is worth more per unit"
@@ -58,16 +91,33 @@ def disagreement(res: pd.DataFrame, a: Assumptions) -> pd.DataFrame:
     return out
 
 
-def insights(listings: pd.DataFrame, a: Assumptions | None = None) -> list[str]:
-    """Factual bullets at the given assumptions (defaults if none)."""
+def insights(listings: pd.DataFrame, a: Assumptions | None = None, category: str | None = None) -> list[str]:
+    """Factual bullets at the given assumptions (defaults if none).
+
+    Pass category to report only that category. 1P items in the frame are
+    counted as substitutes, not as listings assessed.
+    """
     a = a or Assumptions()
+    if category:
+        listings = listings[listings["category"] == category]
     res = evaluate_portfolio(listings, a)
-    n_list, n_3p, n_1p = len(listings), int((listings.listing_type == "3P").sum()), int((listings.listing_type == "1P").sum())
+    n_3p = int((listings.listing_type == "3P").sum())
+    n_1p = int((listings.listing_type == "1P").sum())
+    n_cats = int(listings.loc[listings.listing_type == "3P", "category"].nunique())
     c = _counts(res)
-    lead = (f"In this sample, under these assumptions, {n_list} listings ({n_3p} sold by marketplace "
-            f"partners, {n_1p} sold by The Range as substitutes) give: {BRING_IN_HOUSE} {c[BRING_IN_HOUSE]}, "
-            f"{TEST_3P_FIRST} {c[TEST_3P_FIRST]}, {KEEP_3P} {c[KEEP_3P]}. These are model results on a "
-            f"small public sample, not a forecast of revenue.")
+    recs = (f"{BRING_IN_HOUSE} {c[BRING_IN_HOUSE]}, {TEST_3P_FIRST} {c[TEST_3P_FIRST]}, "
+            f"{KEEP_3P} {c[KEEP_3P]}")
+    if n_cats == 1:
+        cat = listings.loc[listings.listing_type == "3P", "category"].iloc[0]
+        scope = (f"{n_3p} marketplace listings are assessed in {cat}. {n_1p} of The Range's "
+                 f"own items in this category are used only as price and contribution "
+                 f"comparisons (substitutes), not assessed.")
+    else:
+        scope = (f"{n_3p} marketplace listings are assessed across {n_cats} categories. "
+                 f"{n_1p} of The Range's own items are used only as price and contribution "
+                 f"comparisons (substitutes), not assessed.")
+    lead = (f"In this sample, under these assumptions, {scope} Recommendations: {recs}. "
+            f"These are model results on a small public sample, not a forecast of revenue.")
     bullets = [lead]
 
     # Per-category pattern
